@@ -20,7 +20,7 @@ This skill gives Claude Code the context it needs to do better.
 Clone the repo somewhere accessible on your machine:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/cadquery-llm-skill.git ~/cadquery-llm-skill
+git clone https://github.com/jmwright/cadquery-llm-skill.git ~/cadquery-llm-skill
 ```
 
 ## Usage
