@@ -1,3 +1,12 @@
+---
+name: cadquery-assistant
+description: >
+  General CadQuery reference covering the Workplane vs Free Function API choice, BRep over CSG
+  mindset, workplane basics, and fluent idioms (extrude, hole, shell, fillet, chamfer, sweep,
+  loft, mirror, pushPoints). Load for general CadQuery questions, API selection decisions, code
+  structure guidance, or any CadQuery task not clearly covered by a more specific skill.
+---
+
 # CadQuery LLM Skill
 
 This skill helps LLMs write correct, idiomatic CadQuery code.
@@ -10,20 +19,24 @@ Load this file before any CadQuery task. For deeper reference, read the files li
 CadQuery provides two distinct APIs. Always identify which is appropriate before writing code.
 
 ### Fluent (Workplane) API
+
 ```python
 import cadquery as cq
 result = cq.Workplane("XY").box(10, 10, 10).faces(">Z").hole(3)
 ```
+
 - Chains operations on a `Workplane` object with hidden state (current plane, stack)
 - Best for: parts built up from sketches and feature operations (extrude, hole, fillet, shell)
 - Most tutorials and examples use this style
 
 ### Free Function API
+
 ```python
 from cadquery.func import *
 b = box(10, 10, 10)
 result = b - cylinder(1.5, 10)
 ```
+
 - No hidden state — all operations are explicit free functions
 - Selectors still work as methods on Shape objects
 - Boolean ops available as operators: `+` (union), `-` (cut), `*` (intersect), `/` (split)
@@ -41,16 +54,19 @@ trimming surfaces in parametric space — prefer the Free Function API.
 CadQuery uses **Boundary Representation (BRep)**: a model is defined by its surfaces, edges, and vertices — not by Boolean operations on primitives.
 
 The CSG reflex (union/cut everything) produces brittle, unidiomatic code. The BRep reflex asks:
+
 - What faces, edges, or vertices already exist on this shape?
 - Can I select them and build from there?
 - Does a workplane operation (extrude, shell, fillet, chamfer) get me there without a Boolean?
 
 **Wrong reflex (CSG):**
+
 ```python
 result = base.union(cq.Workplane().box(10, 10, 5).translate((0, 0, 10)))
 ```
 
 **Right reflex (BRep):**
+
 ```python
 result = base.faces(">Z").workplane().rect(10, 10).extrude(5)
 ```
@@ -86,6 +102,7 @@ wp5 = cube.faces(">Z").workplane().transformed(offset=(1, 2, 3), rotate=(0, 0, 4
 ```
 
 **Rules:**
+
 - `.workplane()` resets the 2D origin to the center of the selected face/edge by default.
 - `centerOption` controls what "center" means — the default `"ProjectedOrigin"` projects the parent workplane origin onto the new face, which is often not the face center. Always set it explicitly when position matters.
 - After `.workplane()`, coordinates are **local** to that plane, not global.
@@ -97,21 +114,22 @@ wp5 = cube.faces(">Z").workplane().transformed(offset=(1, 2, 3), rotate=(0, 0, 4
 
 Selectors filter faces, edges, wires, or vertices from the current stack.
 
-| Selector | Meaning |
-|----------|---------|
-| `">Z"` | Face/edge with highest Z centroid |
-| `"<Z"` | Face/edge with lowest Z centroid |
-| `"\|X"` | Faces whose normal is parallel to X axis |
-| `"#Z"` | Faces/edges whose normal or direction is orthogonal to Z |
-| `"+Z"` | Faces whose normal points in +Z direction |
-| `">>Z[1]"` | Second item when sorted ascending by Z (0-indexed) |
-| `"<<Z[0]"` | First item when sorted descending by Z |
-| `"%Plane"` | Faces of type Plane (vs Cylinder, Cone, etc.) |
-| `"not >Z"` | Inverts the selector |
-| `">Z and \|X"` | Combines selectors (AND) |
-| `">Z or <Z"` | Combines selectors (OR) |
+| Selector       | Meaning                                                  |
+| -------------- | -------------------------------------------------------- |
+| `">Z"`         | Face/edge with highest Z centroid                        |
+| `"<Z"`         | Face/edge with lowest Z centroid                         |
+| `"\|X"`        | Faces whose normal is parallel to X axis                 |
+| `"#Z"`         | Faces/edges whose normal or direction is orthogonal to Z |
+| `"+Z"`         | Faces whose normal points in +Z direction                |
+| `">>Z[1]"`     | Second item when sorted ascending by Z (0-indexed)       |
+| `"<<Z[0]"`     | First item when sorted descending by Z                   |
+| `"%Plane"`     | Faces of type Plane (vs Cylinder, Cone, etc.)            |
+| `"not >Z"`     | Inverts the selector                                     |
+| `">Z and \|X"` | Combines selectors (AND)                                 |
+| `">Z or <Z"`   | Combines selectors (OR)                                  |
 
 **Tag-based selection (preferred for stability):**
+
 ```python
 result = (
     cq.Workplane("XY")
@@ -131,35 +149,42 @@ Tagging can be very useful, but do not force it in to the script unless it seems
 
 ## Critical Anti-Patterns
 
-
 ### 1. Boolean when a feature operation suffices
-| Instead of... | Use... |
-|--------------|--------|
-| `.cut(cylinder)` | `.faces(...).hole(d)` |
-| `.cut(shell_solid)` | `.shell(thickness)` |
+
+| Instead of...            | Use...                   |
+| ------------------------ | ------------------------ |
+| `.cut(cylinder)`         | `.faces(...).hole(d)`    |
+| `.cut(shell_solid)`      | `.shell(thickness)`      |
 | `.union(chamfered_edge)` | `.edges(...).chamfer(d)` |
 
-### 2. workplane `centerOption` behaviors 
+### 2. workplane `centerOption` behaviors
+
 By default, a `workplane()` call uses `ProjectedOrigin` as the default, which uses the current origin and projects it onto the plan defined by the selected faces.
 This usually works, but can cause unintended results sometimes.
 If the geometric center of the object is the indended center for the operation, it can sometimes be better to use `CenterOfBoundBox`, which uses the X, Y and Z centers of the object's bounding box.
 If the user mentions that the features added on the workplane are not in the expected position, one cause could be this `centerOption` parameter.
+
 ```python
 # Explicit is always better
 cq.Workplane("XY").box(10, 10, 5).faces(">Z").workplane(centerOption="CenterOfBoundBox")
 ```
 
 ### 3. Selector ordering assumptions
+
 Selectors like `">>Z[1]"` depend on sort order across all matching entities. Adding fillets or other features changes the entity count and can shift indices. Prefer tags or geometric selectors (`">Z"`) over index-based ones.
 
 ### 4. Unclosed wires
+
 When building profiles with `.lineTo()`, `.spline()`, etc., always call `.close()` before `.extrude()` or `.revolve()` unless the wire is intentionally open.
 
 ### 5. Forgetting `.end()` after tagging or selector context
+
 After `.tag()` or navigating into a sub-context, use `.end()` to return to the solid before chaining further operations.
 
 ### 6. `BREP_API command not done`
+
 This OpenCASCADE kernel error means the requested geometry is invalid. Common causes:
+
 - Fillet/chamfer radius larger than the shortest adjacent edge, or adjacent fillets overlapping — reduce the radius or fillet edge groups separately
 - Self-intersecting profile (wire crosses itself, revolve profile crosses the axis)
 - Sweep profile too large for the path curvature — the solid folds back on itself
@@ -174,6 +199,7 @@ See `patterns/anti-patterns.md` #14 for detailed fixes.
 Import: `from cadquery.func import *`
 
 **Primitives:**
+
 ```python
 box(w, h, d)
 cylinder(r, h)
@@ -186,6 +212,7 @@ segment((x1,y1,z1), (x2,y2,z2))
 ```
 
 **Shape assembly:**
+
 ```python
 wire(e1, e2, ...)         # edges → wire
 face(wire)                # closed wire → face
@@ -195,6 +222,7 @@ compound(s1, s2, ...)     # shapes → compound
 ```
 
 **Operations:**
+
 ```python
 extrude(profile, direction_vector)
 loft(e1, e2, e3, cap=False)
@@ -203,6 +231,7 @@ revolve(face, axis_point, axis_dir, angle)
 ```
 
 **Placement (no workplane needed):**
+
 ```python
 shape.moved(x=1, y=2, z=3)           # translate
 shape.moved(rx=90, ry=0, rz=45)      # rotate (degrees)
@@ -211,6 +240,7 @@ shape.move(z=5)                       # in-place variant
 ```
 
 **Boolean operators:**
+
 ```python
 a + b      # fuse / union
 a - b      # cut / difference
@@ -219,6 +249,7 @@ a / plane  # split
 ```
 
 **Adding features without booleans (preferred for performance):**
+
 ```python
 top = solid.faces(">Z")
 inner = extrude(circle(r), (0, 0, h))
@@ -246,18 +277,19 @@ Shell can be a little buggy with certain profiles, as can offsetting.
 
 ## For Deeper Reference
 
-| Topic | File |
-|-------|------|
-| BRep vs CSG concepts | `concepts/brep-mindset.md` |
-| Workplane (fluent) API | `concepts/workplanes.md` |
-| Free Function API | `concepts/free-function-api.md` |
-| Full selector reference | `concepts/selectors.md` |
-| Idiomatic patterns | `patterns/common-patterns.md` |
-| Anti-patterns (extended) | `patterns/anti-patterns.md` |
-| Annotated examples | `examples/` |
-| CadQuery API reference | `docs/` |
+| Topic                    | File                            |
+| ------------------------ | ------------------------------- |
+| BRep vs CSG concepts     | `concepts/brep-mindset.md`      |
+| Workplane (fluent) API   | `concepts/workplanes.md`        |
+| Free Function API        | `concepts/free-function-api.md` |
+| Full selector reference  | `concepts/selectors.md`         |
+| Idiomatic patterns       | `patterns/common-patterns.md`   |
+| Anti-patterns (extended) | `patterns/anti-patterns.md`     |
+| Annotated examples       | `examples/`                     |
+| CadQuery API reference   | `docs/`                         |
 
 When working on a CadQuery task:
+
 1. Read this file first.
 2. If the task involves selectors, read `concepts/selectors.md`.
 3. Grep `examples/` for methods you're unsure about: `grep -rn "\.shell\(" examples/`
